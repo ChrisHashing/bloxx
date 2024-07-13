@@ -29,18 +29,19 @@ router.post('/signup', async (req, res) => {
       const sql = 'SELECT * FROM users WHERE referral_code = ?';
       const results = await query(sql, [referralCode]);
 
+      console.log(results);
       console.log(results[0].id);
 
       // Log the results
       console.log('Query results:', results);
 
-    
-        
+
+
       if (results.length > 0) {
         console.log("WOrking");
         referrerId = results[0].id;
-     
-      }else {
+
+      } else {
         console.log("Not working");
         return res.status(400).json({ error: 'Invalid referral code' });
       }
@@ -51,11 +52,30 @@ router.post('/signup', async (req, res) => {
       actualReferralCode = generateReferralCode();
     }
 
+
+
     console.log(actualReferralCode);
     // Insert user into the database
     const insertQuery = 'INSERT INTO users (username, email, password, referral_code, referrer_id) VALUES (?, ?, ?, ?, ?)';
-    const insertParams = [username, email, hashedPassword, actualReferralCode, referrerId];      
+    const insertParams = [username, email, hashedPassword, actualReferralCode, referrerId];
     const insertResult = await db.query(insertQuery, insertParams);
+
+
+    
+    const sql = 'SELECT * FROM users WHERE email = ?';
+    const results = await query(sql, [email]);
+    
+    const userId = results[0].id;
+
+    console.log(results);
+
+    if(referralCode){
+      console.log(referrerId);
+      console.log(userId);
+      const insertReferralQuery = 'INSERT INTO referrals (referrer_id, referee_id) VALUES (?, ?)';
+      const insertReferralParams = [referrerId, userId];
+      await db.query(insertReferralQuery, insertReferralParams);
+    }
 
     const insertedUser = {
       id: insertResult.insertId,
@@ -63,7 +83,7 @@ router.post('/signup', async (req, res) => {
       email,
       referralCode: actualReferralCode // Use actualReferralCode here
     };
-    
+
     res.json(insertedUser);
   } catch (err) {
     console.error('Error signing up:', err.message);
@@ -97,21 +117,37 @@ router.post('/login', (req, res) => {
 });
 
 // Get user profile
-router.get('/profile', (req, res) => {
+router.get('/profile', async (req, res) => {
   try {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    db.query('SELECT username, email, referral_code, referrer_id FROM users WHERE id = ?', [decoded.id], (err, results) => {
-      if (err) {
-        console.error('Error fetching profile:', err.message);
-        res.status(500).json({ error: 'Failed to fetch profile' });
-        return;
-      }
+    // Use util.promisify to promisify db.query
+    const query = util.promisify(db.query).bind(db);
+    
+    // Query to fetch user profile
+    const sql = 'SELECT username, email, referral_code, referrer_id FROM users WHERE id = ?';
+    const results = await query(sql, [decoded.id]);
+
+    console.log(results[0].email);
+    
+    const sql2 = 'SELECT referral_count FROM user_referral_counts WHERE email = ?';
+    const results2 = await query(sql2, [results[0].email]);
+
+    const count = results2[0].referral_count;
+
+
+    let finalData = results[0];
+    finalData.referral_count = count;
+
+    if (results.length > 0) {
+      console.log(finalData);
       res.json(results[0]);
-    });
+    } else {
+      res.status(404).json({ error: 'User not found' });
+    }
   } catch (error) {
-    console.error('Error decoding token:', error.message);
+    console.error('Error fetching profile:', error.message);
     res.status(401).json({ error: 'Unauthorized' });
   }
 });
@@ -186,5 +222,10 @@ router.get('/referred-users/:referralCode', (req, res) => {
     }
   );
 });
+
+
+
+
+
 
 module.exports = router;

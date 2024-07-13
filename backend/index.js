@@ -12,7 +12,7 @@ app.use(cors()); // Enable CORS for all routes
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
-  password: '12345', // Replace with your MySQL password
+  password: '', // Replace with your MySQL password
   database: 'referral_system',
 });
 
